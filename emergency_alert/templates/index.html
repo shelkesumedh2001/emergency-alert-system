@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>IIM Bodh Gaya Emergency Alert System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .section {
+            flex: 1;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px;
+            margin: 5px 0;
+            width: 100%;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>IIM Bodh Gaya Emergency Alert System</h1>
+    
+    <div class="container">
+        <div class="section">
+            <h2>Register</h2>
+            <input type="email" id="regEmail" placeholder="Email">
+            <input type="password" id="regPassword" placeholder="Password">
+            <input type="text" id="regName" placeholder="Name">
+            <select id="regRole">
+                <option value="faculty">Faculty</option>
+                <option value="security">Security</option>
+            </select>
+            <button onclick="register()">Register</button>
+        </div>
+
+        <div class="section">
+            <h2>Login</h2>
+            <input type="email" id="loginEmail" placeholder="Email">
+            <input type="password" id="loginPassword" placeholder="Password">
+            <button onclick="login()">Login</button>
+        </div>
+    </div>
+
+    <div class="section" id="alertSection" style="display: none;">
+        <h2>Send Alert</h2>
+        <button onclick="sendAlert()">SEND EMERGENCY ALERT</button>
+    </div>
+
+    <div class="section" id="securitySection" style="display: none;">
+        <h2>Active Alerts</h2>
+        <div id="alertsList"></div>
+    </div>
+
+    <script>
+        let token = '';
+        let userRole = '';
+
+        async function register() {
+            const response = await fetch('/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: document.getElementById('regEmail').value,
+                    password: document.getElementById('regPassword').value,
+                    name: document.getElementById('regName').value,
+                    role: document.getElementById('regRole').value
+                })
+            });
+            const data = await response.json();
+            alert(data.message);
+        }
+
+        async function login() {
+            const response = await fetch('/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: document.getElementById('loginEmail').value,
+                    password: document.getElementById('loginPassword').value
+                })
+            });
+            const data = await response.json();
+            if (response.ok) {
+                token = data.token;
+                alert('Logged in successfully!');
+                checkRole();
+            } else {
+                alert(data.message);
+            }
+        }
+
+        async function sendAlert() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(async function(position) {
+                    const response = await fetch('/alert', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': token
+                        },
+                        body: JSON.stringify({
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        })
+                    });
+                    const data = await response.json();
+                    alert(data.message);
+                });
+            } else {
+                alert("Geolocation is not supported by this browser.");
+            }
+        }
+
+        async function checkRole() {
+            const response = await fetch('/alerts', {
+                headers: {
+                    'Authorization': token
+                }
+            });
+            if (response.ok) {
+                // User is security
+                document.getElementById('securitySection').style.display = 'block';
+                document.getElementById('alertSection').style.display = 'none';
+                fetchAlerts();
+            } else {
+                // User is faculty
+                document.getElementById('alertSection').style.display = 'block';
+                document.getElementById('securitySection').style.display = 'none';
+            }
+        }
+
+        async function fetchAlerts() {
+            const response = await fetch('/alerts', {
+                headers: {
+                    'Authorization': token
+                }
+            });
+            const alerts = await response.json();
+            const alertsList = document.getElementById('alertsList');
+            alertsList.innerHTML = alerts.map(alert => `
+                <div style="border: 1px solid #ccc; padding: 10px; margin: 10px 0;">
+                    <p>User: ${alert.user}</p>
+                    <p>Location: ${alert.latitude}, ${alert.longitude}</p>
+                    <p>Time: ${new Date(alert.timestamp).toLocaleString()}</p>
+                    <button onclick="resolveAlert(${alert.id})">Resolve</button>
+                </div>
+            `).join('');
+        }
+
+        async function resolveAlert(alertId) {
+            const response = await fetch(`/alert/${alertId}/resolve`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': token
+                }
+            });
+            const data = await response.json();
+            alert(data.message);
+            fetchAlerts();
+        }
+
+        // Refresh alerts every 30 seconds for security personnel
+        setInterval(() => {
+            if (document.getElementById('securitySection').style.display === 'block') {
+                fetchAlerts();
+            }
+        }, 30000);
+    </script>
+</body>
+</html>
